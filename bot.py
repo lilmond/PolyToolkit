@@ -31,7 +31,7 @@ async def profile(interaction: discord.Interaction, user: discord.User):
     embed.title = f"{user.display_name}'s Profile"
     embed.add_field(name="User ID:", value=f"`{user.id}`", inline=True)
     embed.add_field(name="Username:", value=f"`{user.name}`", inline=True)
-    embed.add_field(name="Created At:", value=f"{user.created_at.strftime('%m-%d-%Y %H:%M:%S')}", inline=False)
+    embed.add_field(name="Created At:", value=f"`{user.created_at.strftime('%m-%d-%Y %H:%M:%S')}`", inline=False)
     embed.set_image(url=user.display_avatar.url)
 
     await interaction.response.send_message(embed=embed)
