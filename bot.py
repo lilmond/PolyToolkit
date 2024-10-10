@@ -1,5 +1,8 @@
 from discord import app_commands
 from discord.ext import commands
+from bs4 import BeautifulSoup
+import dns.resolver
+import aiohttp
 import discord
 import time
 import json
@@ -88,20 +91,64 @@ async def restart(interaction: discord.Interaction):
 
     os.execv(sys.executable, ["python3"] + sys.argv)
 
-@tree.command(name="anon_message", description="Send an anonymous chat to a user via this app, basically using it as a proxy messager.")
-@app_commands.describe(user="User to send an anonymous chat to. You can type their user ID.")
-@app_commands.describe(message="The message to send to the user.")
-@app_commands.allowed_installs(guilds=True, users=True)
+@tree.command(name="phone_lookup", description="Lookup a phone number.")
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def anon_message(interaction: discord.Interaction, user: discord.User, message: str):
-    response = await user.send(content=message)
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.describe(phone_number="Target's internation phone number.")
+async def phone_lookup(interaction: discord.Interaction, phone_number: str):
+    phone_number = phone_number.strip().replace("-", "").replace(" ", "").replace("+", "")
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"https://free-lookup.net/{phone_number}") as response:
+            response_text = await response.text()
+            html = BeautifulSoup(response_text, "html.parser")
+
+            try:
+                infos = html.findChild("ul", {"class": "report-summary__list"}).findAll("div")
+            except Exception:
+                return await _command_respond(
+                    interaction,
+                    color=0xff0000,
+                    title="Phone Lookup Error",
+                    description="Invalid phone number.",
+                    ephemeral=False
+                )
+            
+            infos_dict = {k.text.strip(): infos[i+1].text.strip() if infos[i+1].text.strip() else "No information" for i, k in enumerate(infos) if not i % 2}
+
+            embed = discord.Embed()
+            embed.color = CONFIG["THEME_COLOR"]
+            embed.title = "Phone Lookup"
+            embed.description = "Phone number information will be shown below."
+
+            for info in infos_dict:
+                embed.add_field(name=f"{info}", value=f"`{infos_dict[info]}`", inline=True)
+    
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name="dns_resolve", description="Resolve DNS to IP.")
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.describe(domain="Target's domain name.")
+async def dns_resolve(interaction: discord.Interaction, domain: str):
+    try:
+        dns_query = dns.resolver.resolve(qname=domain)
+        answer = dns_query.response.answer
+    except Exception:
+        return await _command_respond(
+            interaction,
+            color=0xff0000,
+            title="DNS Resolve Error",
+            description="Unable to resolve the domain name you provided. Please make sure it is correct and try again.",
+            ephemeral=True
+        )
 
     embed = discord.Embed()
     embed.color = CONFIG["THEME_COLOR"]
-    embed.title = "AnonMessage Proxy"
-    embed.description = f"Your message has been sent to the user. Response: {response}"
+    embed.title = "DNS Resolve"
+    embed.description = f"DNS answer for {domain}:\n```{'\n'.join([data.to_text() for data in answer])}```"
 
-    await interaction.response.send_message(embed=embed, ephemeral=False)
+    await interaction.response.send_message(embed=embed)
 
 if __name__ == "__main__":
     client.run(token=CONFIG["TOKEN"])
